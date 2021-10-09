@@ -32,7 +32,7 @@ def main():
     bovada_request_url = "http://api.dimedata.net/api/json/odds/bovada/v2/60/boxing/boxing/all?api-key=" + API_KEY
 
     for submission in SUBREDDIT_TO_GET_DATA_FROM.new(limit=100):
-        print(submission.title)
+        # print(submission.title)
         if '[FIGHT THREAD]' in submission.title:
 
             # if IS_POSTING_TO_REDDIT and is_post_already_replied_to(submission.comments):
@@ -51,6 +51,8 @@ def main():
             parse_double_events_and_append_to_data(william_hill_data['games'], data)
             parse_double_events_and_append_to_data(draft_kings_data['games'], data)
             parse_single_events_and_append_to_data(bovada_data['games'], data)
+
+            print('DATA', data)
 
             unique_fights_from_api = get_unique_fight_names_from_api(data)
             if not bool(unique_fights_from_api):
@@ -96,36 +98,49 @@ def main():
 
 
 # For data structures from sources like:
-# William Hill
-# DraftKings
+# Bovada
 def parse_single_events_and_append_to_data(source, data):
     idx = 0
     while idx < len(source):
-        data.append(dict(
-            description=source[str(idx)]['description'],
-            nameA=source[str(idx)]['awayTeam'],
-            priceA=source[str(idx)]['gameMoneylineAwayPrice'],
-            nameB=source[str(idx)]['homeTeam'],
-            priceB=source[str(idx)]['gameMoneylineHomePrice'],
-        ))
+        fight = source[str(idx)]
+        is_fight_already_included = any(jellyfish.levenshtein_distance(x['description'], fight['description']) < 5 for x in data)
+        is_reversed_fight_already_included = any(jellyfish.levenshtein_distance(x['description'], reverse_vs(fight['description'])) < 5 for x in data)
+
+        print(fight['description'])
+        if not is_fight_already_included and not is_reversed_fight_already_included:
+            data.append(dict(
+                description=fight['description'],
+                nameA=fight['awayTeam'],
+                priceA=fight['gameMoneylineAwayPrice'],
+                nameB=fight['homeTeam'],
+                priceB=fight['gameMoneylineHomePrice'],
+            ))
 
         idx += 1
 
 
 # For data structures from sources like:
-# Bovada
+# William Hill
+# DraftKings
 def parse_double_events_and_append_to_data(source, data):
     idx = 0
     while idx < (len(source) - 1):
-        data.append(dict(
-            description=source[str(idx)]['description'],
-            nameA=source[str(idx)]['betName'],
-            priceA=source[str(idx)]['betPrice'],
-            nameB=source[str(idx + 1)]['betName'],
-            priceB=source[str(idx + 1)]['betPrice'],
-        ))
+        fight = source[str(idx)]
+        print(fight['description'])
+        is_fight_already_included = any(x['description'] == fight['description'] for x in data)
+        is_reversed_fight_already_included = any(x['description'] == reverse_vs(fight['description']) for x in data)
+
+        if not is_fight_already_included and not is_reversed_fight_already_included:
+            data.append(dict(
+                description=fight['description'],
+                nameA=fight['betName'],
+                priceA=fight['betPrice'],
+                nameB=source[str(idx + 1)]['betName'],
+                priceB=source[str(idx + 1)]['betPrice'],
+            ))
 
         idx += 2
+
 
 
 # If bot already commented, we don't want to comment again.
@@ -143,8 +158,9 @@ def get_unique_fight_names_from_api(data):
     unique_fights = []
     for i in range(0, len(data)):
         description = data[i]['description']
-        if all(x != description for x in unique_fights):
+        if all(x != description and x != reverse_vs(description) for x in unique_fights):
             unique_fights.append(description)
+
     return unique_fights
 
 
